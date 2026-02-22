@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Emoji Picker - 智能表情选择器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#1a1a2e;--surface:#16213e;--surface2:#0f3460;--accent:#e94560;--accent2:#533483;--text:#eee;--text2:#aaa;--radius:12px;--shadow:0 4px 20px rgba(0,0,0,.3)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.container{max-width:900px;width:100%;padding:16px}
+header{text-align:center;padding:24px 0 16px}
+header h1{font-size:2em;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+header p{color:var(--text2);font-size:.9em}
+.search-box{position:relative;margin:16px 0}
+.search-box input{width:100%;padding:14px 20px 14px 48px;border:2px solid var(--surface2);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:1em;outline:none;transition:border .3s}
+.search-box input:focus{border-color:var(--accent)}
+.search-box .icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:1.2em}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:8px 0;margin-bottom:12px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:8px 14px;border-radius:20px;background:var(--surface);border:none;color:var(--text2);cursor:pointer;font-size:.85em;white-space:nowrap;transition:all .3s}
+.tab:hover,.tab.active{background:var(--accent);color:#fff}
+.section-title{font-size:.85em;color:var(--text2);margin:16px 0 8px;padding-left:4px}
+.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:4px;margin-bottom:16px}
+.emoji-item{font-size:1.8em;padding:8px;text-align:center;border-radius:var(--radius);cursor:pointer;transition:all .2s;position:relative;user-select:none}
+.emoji-item:hover{background:var(--surface2);transform:scale(1.2)}
+.emoji-item:active{transform:scale(.95)}
+.emoji-item .fav-btn{position:absolute;top:0;right:0;font-size:.4em;opacity:0;transition:opacity .2s;background:none;border:none;cursor:pointer;padding:2px}
+.emoji-item:hover .fav-btn{opacity:1}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--accent);color:#fff;padding:12px 24px;border-radius:var(--radius);font-size:.95em;opacity:0;transition:all .4s;z-index:999;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.recommend-panel{background:var(--surface);border-radius:var(--radius);padding:12px 16px;margin:12px 0;display:none}
+.recommend-panel.show{display:block}
+.recommend-panel h3{font-size:.85em;color:var(--text2);margin-bottom:8px}
+.recommend-panel .emoji-grid{grid-template-columns:repeat(auto-fill,minmax(42px,1fr))}
+footer{text-align:center;padding:20px;color:var(--text2);font-size:.8em;margin-top:auto}
+@media(max-width:600px){
+  header h1{font-size:1.5em}
+  .emoji-grid{grid-template-columns:repeat(auto-fill,minmax(40px,1fr))}
+  .emoji-item{font-size:1.5em;padding:6px}
+  .container{padding:10px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1>🎨 AI Emoji Picker</h1>
+<p>点击复制 · 智能推荐 · 收藏管理</p>
+</header>
+<div class="search-box">
+<span class="icon">🔍</span>
+<input type="text" id="searchInput" placeholder="搜索表情... (支持中英文，如 开心、cat、love)">
+</div>
+<div class="tabs" id="tabs"></div>
+<div class="recommend-panel" id="recommendPanel">
+<h3>✨ 相关推荐</h3>
+<div class="emoji-grid" id="recommendGrid"></div>
+</div>
+<div id="emojiContent"></div>
+</div>
+<div class="toast" id="toast"></div>
+<footer>AI Emoji Picker &copy; 2024 | Made with ❤️</footer>
+<script>
+const emojiData = {
+"😀笑脸与情感": {
+  emojis: "😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗☺😚😙🥲😋😛😜🤪😝🤑🤗🤭🤫🤔🫡🤐🫠😐😑😶🫥😏😒🙄😬🤥🫨😌😔😪🤤😴😷🤒🤕🤢🤮🤧🥵🥶🥴😵🤯🤠🥳🥸😎🤓🧐😕🫤😟🙁☹😮😯😲😳🥺🥹😦😧😨😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬😈👿💀☠💩🤡👹👺👻👽👾🤖😺😸😹😻😼😽🙀😿😾",
+  keywords: {
+    "开心,高兴,快乐,happy,joy,smile,笑": "😀😃😄😁😆😊🥳",
+    "哭,难过,伤心,sad,cry": "😢😭😥😰😩😞😔",
+    "爱,喜欢,love,heart,like": "🥰😍😘😗😚😙❤️",
+    "生气,愤怒,angry,mad": "😤😡😠🤬👿",
+    "害怕,恐惧,fear,scared": "😨😰😱😧😦",
+    "惊讶,surprise,shock,wow": "😮😯😲😳🤯",
+    "酷,cool,sunglasses": "😎🤓🧐🥸",
+    "恶心,sick,vomit": "🤢🤮🤒🤕😷",
+    "困,睡觉,sleep,tired": "😪🤤😴😔🥱",
+    "鬼,ghost,devil,skull": "💀☠👻👹👺😈👿🤡",
+    "猫,cat,kitty": "😺😸😹😻😼😽🙀😿😾",
+    "思考,think,wonder": "🤔🧐🫡🤐",
+    "尴尬,awkward,embarrass": "😅😬🫠🙃"
+  }
+},
+"👋人物与手势": {
+  emojis: "👋🤚🖐✋🖖🫱🫲🫳🫴👌🤌🤏✌🤞🫰🤟🤘🤙👈👉👆🖕👇☝🫵👍👎✊👊🤛🤜👏🙌🫶👐🤲🤝🙏✍💅🤳💪🦾🦿🦵🦶👂🦻👃🧠🫀🫁🦷🦴👀👁👅👄🫦👶🧒👦👧🧑👱👨🧔👩🧓👴👵🙍🙎🙅🙆💁🙋🧏🙇🤦🤷👮🕵💂🥷👷🫅🤴👸👳👲🧕🤵👰🤰🫃🫄🤱👼🎅🤶🦸🦹🧙🧚🧛🧜🧝🧞🧟💆💇🚶🧍🧎🏃💃🕺",
+  keywords: {
+    "手,hand,wave,hi,你好": "👋🤚🖐✋🖖🫱🫲",
+    "赞,好,棒,good,thumbs,ok,nice": "👍👌🤌🤏✌🤞🤟",
+    "拳头,punch,fist,fight": "✊👊🤛🤜",
+    "鼓掌,拍手,clap,applause": "👏🙌🫶",
+    "祈祷,pray,please,thanks": "🙏🤲🤝",
+    "肌肉,力量,strong,muscle,power": "💪🦾",
+    "宝宝,婴儿,baby,child,kid": "👶🧒👦👧",
+    "老人,old,elder": "🧓👴👵",
+    "警察,police,cop": "👮🕵",
+    "公主,王子,prince,princess,king,queen": "🤴👸🫅",
+    "圣诞,christmas,santa": "🎅🤶",
+    "跑,走,run,walk": "🚶🧍🧎🏃",
+    "跳舞,dance": "💃🕺",
+    "超人,hero,villain": "🦸🦹",
+    "魔法,magic,fairy": "🧙🧚🧛🧜🧝🧞"
+  }
+},
+"🐱动物与自然": {
+  emojis: "🐶🐱🐭🐹🐰🦊🐻🐼🐻‍❄️🐨🐯🦁🐮🐷🐽🐸🐵🙈🙉🙊🐒🐔🐧🐦🐤🐣🐥🦆🦅🦉🦇🐺🐗🐴🦄🐝🪱🐛🦋🐌🐞🐜🪰🪲🪳🦟🦗🕷🕸🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🪸🐡🐠🐟🐬🐳🐋🦈🦭🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕‍🦺🐈🐈‍⬛🪶🐓🦃🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🌵🎄🌲🌳🌴🪵🌱🌿☘🍀🎍🪴🎋🍃🍂🍁🪺🪹🍄🐚🪨🌾💐🌷🌹🥀🌺🌸🌼🌻🌞🌝🌛🌜🌚🌕🌖🌗🌘🌑🌒🌓🌔🌙🌎🌍🌏🪐💫⭐🌟✨⚡☄🔥🌪🌈☀🌤⛅🌥☁🌦🌧⛈🌩🌨❄☃⛄🌬💨💧💦🫧☔☂🌊",
+  keywords: {
+    "狗,dog,puppy,汪": "🐶🐕🐩🦮🐕‍🦺",
+    "猫,cat,kitty,喵": "🐱🐈🐈‍⬛",
+    "熊,bear,panda": "🐻🐼🐻‍❄️🐨",
+    "兔子,rabbit,bunny": "🐰🐇",
+    "狐狸,fox": "🦊",
+    "老虎,tiger,lion,狮子": "🐯🦁🐅🐆",
+    "猴子,monkey,ape": "🐵🙈🙉🙊🐒🦍🦧",
+    "鸟,bird,鸡,chicken": "🐦🐤🐣🐥🦆🦅🦉🐔🐓🦃🦚🦜🦢🦩🕊",
+    "鱼,fish,海洋,ocean,sea": "🐡🐠🐟🐬🐳🐋🦈🐙🦑🦐🦞🦀",
+    "蛇,snake,虫,bug,insect": "🐍🐛🦋🐌🐞🐜🕷🦂🐝🪱",
+    "花,flower,rose,玫瑰": "💐🌷🌹🥀🌺🌸🌼🌻",
+    "树,tree,plant,植物": "🌵🎄🌲🌳🌴🌱🌿🍀🪴",
+    "天气,weather,rain,雨,雪,snow,sun,太阳": "☀🌤⛅🌧🌨❄☃⛄🌈🌪",
+    "月亮,moon,星星,star": "🌙🌕🌖🌗🌘🌑🌒🌓🌔💫⭐🌟✨",
+    "恐龙,dinosaur": "🦖🦕🐉🐲",
+    "马,horse,unicorn,独角兽": "🐴🐎🦄"
+  }
+},
+"🍎食物与饮料": {
+  emojis: "🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝🍅🍆🥑🥦🥬🥒🌶🫑🌽🥕🧄🧅🥔🍠🫘🥜🌰🫚🫛🍞🥐🥖🫓🥨🥯🥞🧇🧀🍖🍗🥩🥓🍔🍟🍕🌭🥪🌮🌯🫔🥙🧆🥚🍳🥘🍲🫕🥣🥗🍿🧈🧂🥫🍱🍘🍙🍚🍛🍜🍝🍠🍢🍣🍤🍥🥮🍡🥟🥠🥡🦀🦞🦐🦑🦪🍦🍧🍨🍩🍪🎂🍰🧁🥧🍫🍬🍭🍮🍯🍼🥛☕🫖🍵🍶🍾🍷🍸🍹🍺🍻🥂🥃🫗🥤🧋🧃🧉🧊🥢🍽🍴🥄",
+  keywords: {
+    "水果,fruit,apple,苹果": "🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝",
+    "蔬菜,vegetable,菜": "🍅🍆🥑🥦🥬🥒🌶🫑🌽🥕🧄🧅🥔🍠",
+    "肉,meat,beef,chicken,鸡肉,牛肉": "🍖🍗🥩🥓",
+    "快餐,fast food,burger,pizza,汉堡,披萨": "🍔🍟🍕🌭🥪🌮🌯",
+    "面包,bread,蛋糕,cake": "🍞🥐🥖🥨🥯🥞🧇🎂🍰🧁🥧",
+    "甜点,dessert,sweet,糖,candy,冰淇淋,ice cream": "🍦🍧🍨🍩🍪🍫🍬🍭🍮🍯",
+    "饮料,drink,coffee,咖啡,茶,tea,beer,啤酒,酒,wine": "☕🫖🍵🍶🍾🍷🍸🍹🍺🍻🥂🥃🥤🧋🧃",
+    "中餐,chinese,rice,饭,面,noodle,寿司,sushi": "🍱🍘🍙🍚🍛🍜🍝🍢🍣🍤🍥🥮🍡🥟🥠🥡",
+    "海鲜,seafood,shrimp,虾,蟹,crab": "🦀🦞🦐🦑🦪",
+    "奶,milk,牛奶": "🍼🥛🧈",
+    "蛋,egg": "🥚🍳",
+    "奶茶,bubble tea,boba": "🧋🥤"
+  }
+},
+"✈旅行与地点": {
+  emojis: "🚗🚕🚙🚌🚎🏎🚓🚑🚒🚐🛻🚚🚛🚜🏍🛵🚲🛴🛹🛼🚏🛣🛤🛞⛽🛞🚨🚥🚦🛑🚧⚓🛟⛵🛶🚤🛳⛴🛥🚢✈🛩🛫🛬🪂💺🚁🚟🚠🚡🛰🚀🛸🛎🧳🏠🏡🏘🏚🏗🏭🏢🏬🏣🏤🏥🏦🏨🏪🏫🏩💒🏛⛪🕌🛕🕍🕋⛩🛤🗾🎑🏞🌅🌄🌠🎇🎆🌇🌆🏙🌃🌌🌉🌁🗼🗽🗿💈🎪🎠🎡🎢🚂🚃🚄🚅🚆🚇🚈🚉🚊🚝🚞🚋🚌🚍🚎🚐🚑🚒🚓🚔🚕🚖🚗🚘🚙🛺",
+  keywords: {
+    "车,car,drive,开车,汽车": "🚗🚕🚙🏎🚓🚑🚒🚐🛻🚚🚛",
+    "飞机,plane,fly,airplane,航班": "✈🛩🛫🛬💺",
+    "火车,train,地铁,subway,metro": "🚂🚃🚄🚅🚆🚇🚈🚉🚊🚝🚞",
+    "船,ship,boat,sail": "⛵🛶🚤🛳⛴🛥🚢",
+    "自行车,bike,bicycle,摩托,motorcycle": "🏍🛵🚲🛴🛹",
+    "房子,house,home,家,建筑,building": "🏠🏡🏘🏚🏗🏭🏢🏬🏣🏤🏥🏦🏨🏪🏫",
+    "教堂,church,寺庙,temple": "⛪🕌🛕🕍🕋⛩",
+    "火箭,rocket,太空,space,ufo": "🚀🛸🛰",
+    "日出,日落,sunrise,sunset,风景,scenery": "🌅🌄🌠🎇🎆🌇🌆🏙🌃🌌🌉🌁",
+    "地标,landmark,塔,tower": "🗼🗽🗿",
+    "游乐园,amusement,carnival": "🎪🎠🎡🎢"
+  }
+},
+"⚽活动": {
+  emojis: "⚽🏀🏈⚾🥎🎾🏐🏉🥏🎱🪀🏓🏸🏒🏑🥍🏏🪃🥅⛳🪁🏹🎣🤿🥊🥋🎽🛹🛼🛷⛸🥌🎿⛷🏂🪂🏋🤼🤸🤺⛹🏇🧘🏄🏊🤽🚣🧗🚵🚴🏆🥇🥈🥉🏅🎖🏵🎗🎫🎟🎪🎭🎨🎬🎤🎧🎼🎹🥁🪘🎷🎺🎸🪕🎻🪗🎲♟🎯🎳🎮🕹🧩🪅🪩🪆🎰🧸🪀🎈🎉🎊🎀🎁🎆🎇🧨✨🎏🎐🎑🧧🎃🎄🎋🎍",
+  keywords: {
+    "足球,soccer,football": "⚽",
+    "篮球,basketball": "🏀",
+    "运动,sport,exercise,锻炼": "⚽🏀🏈⚾🎾🏐🏉🏓🏸🏒🏑🏏",
+    "游泳,swim": "🏊🤽🏄",
+    "滑雪,ski,snow sport": "🎿⛷🏂",
+    "拳击,boxing,格斗,fight,martial": "🥊🥋🤼🤺",
+    "奖牌,medal,trophy,冠军,champion,win": "🏆🥇🥈🥉🏅🎖",
+    "音乐,music,guitar,吉他,钢琴,piano,drum,鼓": "🎤🎧🎼🎹🥁🪘🎷🎺🎸🪕🎻🪗",
+    "游戏,game,play,玩": "🎮🕹🧩🎲♟🎯🎳🎰",
+    "派对,party,庆祝,celebrate,生日,birthday": "🎈🎉🎊🎀🎁🎆🎇🧨✨",
+    "艺术,art,画,paint,电影,movie,film": "🎨🎬🎭",
+    "钓鱼,fishing": "🎣",
+    "瑜伽,yoga": "🧘",
+    "骑马,horse riding": "🏇",
+    "圣诞,christmas,新年,new year,春节": "🎄🎋🎍🧧🎃🎏🎐🎑"
+  }
+},
+"💡物品": {
+  emojis: "⌚📱📲💻⌨🖥🖨🖱🖲🕹🗜💽💾💿📀📼📷📸📹🎥📽🎞📞☎📟📠📺📻🎙🎚🎛🧭⏱⏲⏰🕰⌛⏳📡🔋🪫🔌💡🔦🕯🪔🧯🛢💰💴💵💶💷🪙💸💳🪪💎⚖🪜🧰🪛🔧🔩⚙🗜🔗⛓🪝🧲🔫💣🪓🔪🗡⚔🛡🚬⚰🪦⚱🏺🔮📿🧿🪬💈⚗🔭🔬🕳🩻🩹🩺💊💉🩸🧬🦠🧫🧪🌡🧹🪠🧺🧻🚽🚰🚿🛁🛀🧼🪥🪒🧽🪣🧴🔑🗝🚪🪑🛋🛏🛌🧸🪆🖼🪞🪟🛍🛒🎁🎈🎏🎀🪄🪅🎉🎊🎎🏮🎐✉📩📨📧💌📥📦📫📪📬📭📮🗳✏✒🖋🖊🖌🖍📝💼📁📂🗂📅📆🗒🗓📇📈📉📊📋📌📍📎🖇📏📐✂🗃🗄🗑🔒🔓🔏🔐🔑🗝",
+  keywords: {
+    "手机,phone,mobile,电话": "📱📲📞☎📟",
+    "电脑,computer,laptop,笔记本": "💻⌨🖥🖨🖱🖲",
+    "相机,camera,拍照,photo": "📷📸📹🎥📽",
+    "钱,money,cash,dollar,💰": "💰💴💵💶💷🪙💸💳",
+    "钥匙,key,锁,lock": "🔑🗝🔒🔓🔏🔐",
+    "工具,tool,wrench,hammer": "🧰🪛🔧🔩⚙🪜",
+    "药,medicine,医疗,medical,hospital": "💊💉🩸🩹🩺🩻",
+    "灯,light,lamp": "💡🔦🕯🪔",
+    "书,book,笔,pen,write,写": "✏✒🖋🖊🖌🖍📝",
+    "信,mail,email,邮件": "✉📩📨📧💌📥📦📫📪📬📭📮",
+    "日历,calendar,日期,date": "📅📆🗒🗓",
+    "手表,watch,时钟,clock,time,时间": "⌚⏱⏲⏰🕰⌛⏳",
+    "钻石,diamond,gem,宝石": "💎",
+    "炸弹,bomb,武器,weapon,刀,knife,sword": "💣🪓🔪🗡⚔🛡🔫",
+    "家具,furniture,bed,chair,床,椅子": "🪑🛋🛏🛌",
+    "浴室,bathroom,toilet,厕所": "🚽🚰🚿🛁🧼🪥🪒"
+  }
+},
+"🔣符号": {
+  emojis: "❤🧡💛💚💙💜🖤🤍🤎💔❤️‍🔥❤️‍🩹❣💕💞💓💗💖💘💝💟☮✝☪🕉☸✡🔯🕎☯☦🛐⛎♈♉♊♋♌♍♎♏♐♑♒♓🆔⚛🉑☢☣📴📳🈶🈚🈸🈺🈷✴🆚💮🉐㊙㊗🈴🈵🈹🈲🅰🅱🆎🆑🅾🆘❌⭕🛑⛔📛🚫💯💢♨🚷🚯🚳🚱🔞📵🚭❗❕❓❔‼⁉🔅🔆〽⚠🚸🔱⚜🔰♻✅🈯💹❇✳❎🌐💠Ⓜ🌀💤🏧🚾♿🅿🛗🈳🈂🛂🛃🛄🛅🚹🚺🚼⚧🚻🚮🎦📶🈁🔣ℹ🔤🔡🔠🆖🆗🆙🆒🆕🆓0️⃣1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣🔟🔢#️⃣*️⃣⏏▶⏩⏭⏯◀⏪⏮🔼⏫🔽⏬⏸⏹⏺⏏🎦🔅🔆📶🔀🔁🔂🔃🔄🔙🔚🔛🔜🔝",
+  keywords: {
+    "爱心,心,heart,love,红心": "❤🧡💛💚💙💜🖤🤍🤎💔❤️‍🔥❤️‍🩹❣💕💞💓💗💖💘💝💟",
+    "星座,zodiac,horoscope": "♈♉♊♋♌♍♎♏♐♑♒♓⛎",
+    "警告,warning,danger,危险": "⚠🚸❗❕‼⁉",
+    "禁止,ban,forbidden,no": "🚫🚷🚯🚳🚱🔞📵🚭⛔🛑",
+    "对,正确,check,yes,correct": "✅☑✔",
+    "错,wrong,cross,no,cancel": "❌❎",
+    "数字,number,digit": "0️⃣1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣🔟",
+    "播放,play,music,pause,stop": "▶⏩⏭⏯◀⏪⏮⏸⏹⏺",
+    "回收,recycle,环保,green": "♻🌐💚",
+    "宗教,religion,peace,和平": "☮✝☪🕉☸✡🔯🕎☯☦🛐",
+    "100,满分,perfect": "💯",
+    "sos,help,急救,emergency": "🆘🚨"
+  }
+},
+"🏁旗帜": {
+  emojis: "🏁🚩🎌🏴🏳🏳️‍🌈🏳️‍⚧️🏴‍☠️🇨🇳🇺🇸🇬🇧🇯🇵🇰🇷🇫🇷🇩🇪🇮🇹🇪🇸🇷🇺🇧🇷🇮🇳🇦🇺🇨🇦🇲🇽🇦🇷🇿🇦🇪🇬🇳🇬🇰🇪🇹🇭🇻🇳🇮🇩🇲🇾🇸🇬🇵🇭🇹🇼🇭🇰🇲🇴🇳🇿🇨🇭🇸🇪🇳🇴🇩🇰🇫🇮🇳🇱🇧🇪🇦🇹🇵🇱🇵🇹🇬🇷🇹🇷🇸🇦🇦🇪🇮🇱🇮🇷🇮🇶🇵🇰🇧🇩🇱🇰🇲🇲🇰🇭🇱🇦🇳🇵🇲🇳🇰🇿🇺🇿🇺🇦🇨🇿🇭🇺🇷🇴🇧🇬🇭🇷🇷🇸🇨🇴🇵🇪🇨🇱🇪🇨🇻🇪🇨🇺🇯🇲🇵🇷🇩🇴🇭🇹🇰🇼🇶🇦🇧🇭🇴🇲🇯🇴🇱🇧🇸🇾🇪🇹🇬🇭🇹🇿🇺🇬🇲🇦🇩🇿🇹🇳🇱🇾",
+  keywords: {
+    "中国,china,chinese": "🇨🇳",
+    "美国,usa,america,american": "🇺🇸",
+    "英国,uk,british,england": "🇬🇧",
+    "日本,japan,japanese": "🇯🇵",
+    "韩国,korea,korean": "🇰🇷",
+    "法国,france,french": "🇫🇷",
+    "德国,germany,german": "🇩🇪",
+    "意大利,italy,italian": "🇮🇹",
+    "西班牙,spain,spanish": "🇪🇸",
+    "俄罗斯,russia,russian": "🇷🇺",
+    "巴西,brazil": "🇧🇷",
+    "印度,india,indian": "🇮🇳",
+    "澳大利亚,australia": "🇦🇺",
+    "加拿大,canada": "🇨🇦",
+    "彩虹,rainbow,lgbtq,pride": "🏳️‍🌈🏳️‍⚧️",
+    "海盗,pirate": "🏴‍☠️",
+    "旗,flag,旗帜": "🏁🚩🎌🏴🏳",
+    "台湾,taiwan": "🇹🇼",
+    "香港,hong kong": "🇭🇰",
+    "澳门,macau,macao": "🇲🇴",
+    "新加坡,singapore": "🇸🇬",
+    "泰国,thailand,thai": "🇹🇭",
+    "越南,vietnam": "🇻🇳"
+  }
+}
+};
+const recommendations = {
+  "❤": "❤️‍🔥💕💗💖💘💝💞💓❣🖤🤍🤎💔💟🧡💛💚💙💜",
+  "❤️": "❤️‍🔥💕💗💖💘💝💞💓❣🖤🤍🤎💔💟🧡💛💚💙💜",
+  "😀": "😃😄😁😆😅🤣😂🙂😊😉🥳🤩",
+  "😂": "🤣😅😆😁😄😃🤪😜😝",
+  "😍": "🥰😘🤩😻💕❤️💗💖💘",
+  "😭": "😢😥😰😩😞😔😿💔🥺",
+  "😡": "😠🤬😤👿💢🔥",
+  "👍": "👌✌🤞🤟🤘🤙👏🙌💪✅",
+  "🔥": "💥✨⚡🌟💫🎆🎇☄️❤️‍🔥",
+  "💀": "☠👻👽🤖💩😈👿🎃",
+  "🎉": "🎊🥳🎈🎀🎁🎆🎇✨🪅🪩🎏🎐",
+  "🐶": "🐕🐩🦮🐕‍🦺🐾🦴🐺🐱",
+  "🐱": "🐈🐈‍⬛😺😸😹😻😼😽🙀😿😾🐾",
+  "🌹": "🌷🌸🌺🌼🌻💐🥀🪷🏵️",
+  "☀": "🌤⛅🌈🔥🌞🌅🌄✨",
+  "🍕": "🍔🍟🌭🥪🌮🌯🥙🍿",
+  "🍺": "🍻🥂🍷🍸🍹🍾🥃🧋☕🍵",
+  "⚽": "🏀🏈⚾🎾🏐🏉🥏🏓🏸",
+  "🎮": "🕹🧩🎲♟🎯🎳🎰🃏",
+  "💻": "🖥⌨🖱🖲📱📲🖨💾💿",
+  "📱": "📲💻🖥📞☎📟📠",
+  "🚗": "🚕🚙🏎🚓🚑🚒🚐🛻🚚🏍🛵",
+  "✈": "🛩🛫🛬💺🚀🛸🛰🚁",
+  "🏠": "🏡🏘🏚🏗🏢🏬🏭🏛",
+  "💰": "💵💴💶💷🪙💸💳💎🤑",
+  "🎵": "🎶🎼🎹🎸🎷🎺🥁🎻🎤🎧",
+  "📚": "📖📕📗📘📙📓📒📔📝✏",
+  "🇨🇳": "🇭🇰🇲🇴🇹🇼🇯🇵🇰🇷🇻🇳🇹🇭🇸🇬",
+  "🇺🇸": "🇬🇧🇨🇦🇦🇺🇳🇿🇫🇷🇩🇪",
+  "😊": "😄😁🥰😇🤗☺😌🙂",
+  "🥺": "🥹😢😭😿💔😞😔🙁",
+  "🤔": "🧐🤨🫤😐😑🤫🤭🫡",
+  "😎": "🤓🧐🥸🤩😏🤑🤠",
+  "👻": "💀☠😈👿👹👺🤡🎃",
+  "🌈": "🏳️‍🌈✨🌟💫⭐🎨🦄",
+  "💪": "🦾🏋🤸🏆🥇💯🔥✊",
+  "🙏": "🤲🤝👐🫶☮🕊✌❤️",
+  "😴": "😪🤤💤🛌🛏🌙⭐🌛",
+  "🤮": "🤢🤒🤕😷🤧🥴😵💊",
+  "🎂": "🍰🧁🥧🎉🎈🎁🎊🥳🕯",
+  "💍": "💎👰🤵💒❤️💕💘🥂",
+  "🌙": "🌛🌜🌚🌕🌖🌗🌘🌑🌒🌓🌔⭐✨💫",
+  "🦋": "🐛🐌🐞🐝🌸🌺🌹🌷💐"
+};
+
+// State
+let favorites = JSON.parse(localStorage.getItem('emoji-favorites') || '[]');
+let recent = JSON.parse(localStorage.getItem('emoji-recent') || '[]');
+let currentTab = 'all';
+
+// DOM
+const tabsEl = document.getElementById('tabs');
+const contentEl = document.getElementById('emojiContent');
+const searchInput = document.getElementById('searchInput');
+const toastEl = document.getElementById('toast');
+const recommendPanel = document.getElementById('recommendPanel');
+const recommendGrid = document.getElementById('recommendGrid');
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 1500);
+}
+
+function copyEmoji(emoji) {
+  navigator.clipboard.writeText(emoji).then(() => {
+    showToast('✅ 已复制 ' + emoji);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = emoji;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✅ 已复制 ' + emoji);
+  });
+  addRecent(emoji);
+  showRecommendations(emoji);
+}
+
+function addRecent(emoji) {
+  recent = recent.filter(e => e !== emoji);
+  recent.unshift(emoji);
+  if (recent.length > 50) recent = recent.slice(0, 50);
+  localStorage.setItem('emoji-recent', JSON.stringify(recent));
+}
+
+function toggleFavorite(emoji, e) {
+  e.stopPropagation();
+  const idx = favorites.indexOf(emoji);
+  if (idx > -1) {
+    favorites.splice(idx, 1);
+    showToast('💔 取消收藏 ' + emoji);
+  } else {
+    favorites.push(emoji);
+    showToast('⭐ 已收藏 ' + emoji);
+  }
+  localStorage.setItem('emoji-favorites', JSON.stringify(favorites));
+  render();
+}
+
+function showRecommendations(emoji) {
+  const rec = recommendations[emoji];
+  if (!rec) { recommendPanel.classList.remove('show'); return; }
+  const emojis = [...rec];
+  recommendGrid.innerHTML = '';
+  emojis.forEach(e => {
+    if (typeof e === 'string' && e.trim()) {
+      const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+      const segments = [...segmenter.segment(e)].map(s => s.segment);
+      // Actually rec is a string, split into individual emojis
+    }
+  });
+  // Split recommendation string into individual emojis
+  const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const recEmojis = [...segmenter.segment(rec)].map(s => s.segment).filter(s => s.trim());
+  recommendGrid.innerHTML = '';
+  recEmojis.forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'emoji-item';
+    div.textContent = e;
+    div.onclick = () => copyEmoji(e);
+    recommendGrid.appendChild(div);
+  });
+  recommendPanel.classList.add('show');
+}
+function splitEmojis(str) {
+  try {
+    const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    return [...segmenter.segment(str)].map(s => s.segment).filter(s => s.trim());
+  } catch(e) {
+    return [...str].filter(s => s.trim());
+  }
+}
+
+function createEmojiEl(emoji) {
+  const div = document.createElement('div');
+  div.className = 'emoji-item';
+  div.textContent = emoji;
+  div.onclick = () => copyEmoji(emoji);
+  const favBtn = document.createElement('button');
+  favBtn.className = 'fav-btn';
+  favBtn.textContent = favorites.includes(emoji) ? '⭐' : '☆';
+  favBtn.onclick = (e) => toggleFavorite(emoji, e);
+  div.appendChild(favBtn);
+  return div;
+}
+
+function render() {
+  contentEl.innerHTML = '';
+  const query = searchInput.value.trim().toLowerCase();
+
+  if (query) {
+    renderSearch(query);
+    return;
+  }
+
+  if (currentTab === 'all') {
+    // Show recent and favorites first
+    if (recent.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'section-title';
+      title.textContent = '🕐 最近使用';
+      contentEl.appendChild(title);
+      const grid = document.createElement('div');
+      grid.className = 'emoji-grid';
+      recent.slice(0, 30).forEach(e => grid.appendChild(createEmojiEl(e)));
+      contentEl.appendChild(grid);
+    }
+    if (favorites.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'section-title';
+      title.textContent = '⭐ 我的收藏';
+      contentEl.appendChild(title);
+      const grid = document.createElement('div');
+      grid.className = 'emoji-grid';
+      favorites.forEach(e => grid.appendChild(createEmojiEl(e)));
+      contentEl.appendChild(grid);
+    }
+    // Show all categories
+    Object.entries(emojiData).forEach(([cat, data]) => {
+      const title = document.createElement('div');
+      title.className = 'section-title';
+      title.textContent = cat;
+      contentEl.appendChild(title);
+      const grid = document.createElement('div');
+      grid.className = 'emoji-grid';
+      splitEmojis(data.emojis).forEach(e => grid.appendChild(createEmojiEl(e)));
+      contentEl.appendChild(grid);
+    });
+  } else if (currentTab === 'recent') {
+    if (recent.length === 0) {
+      contentEl.innerHTML = '<div class="section-title" style="text-align:center;padding:40px">还没有使用记录，点击任意表情开始吧 😊</div>';
+      return;
+    }
+    const title = document.createElement('div');
+    title.className = 'section-title';
+    title.textContent = '🕐 最近使用';
+    contentEl.appendChild(title);
+    const grid = document.createElement('div');
+    grid.className = 'emoji-grid';
+    recent.forEach(e => grid.appendChild(createEmojiEl(e)));
+    contentEl.appendChild(grid);
+  } else if (currentTab === 'favorites') {
+    if (favorites.length === 0) {
+      contentEl.innerHTML = '<div class="section-title" style="text-align:center;padding:40px">还没有收藏，悬停表情点击 ☆ 收藏吧 ⭐</div>';
+      return;
+    }
+    const title = document.createElement('div');
+    title.className = 'section-title';
+    title.textContent = '⭐ 我的收藏';
+    contentEl.appendChild(title);
+    const grid = document.createElement('div');
+    grid.className = 'emoji-grid';
+    favorites.forEach(e => grid.appendChild(createEmojiEl(e)));
+    contentEl.appendChild(grid);
+  } else {
+    // Specific category
+    const data = emojiData[currentTab];
+    if (data) {
+      const title = document.createElement('div');
+      title.className = 'section-title';
+      title.textContent = currentTab;
+      contentEl.appendChild(title);
+      const grid = document.createElement('div');
+      grid.className = 'emoji-grid';
+      splitEmojis(data.emojis).forEach(e => grid.appendChild(createEmojiEl(e)));
+      contentEl.appendChild(grid);
+    }
+  }
+}
+
+function renderSearch(query) {
+  const results = new Set();
+  Object.entries(emojiData).forEach(([cat, data]) => {
+    // Search in keywords
+    Object.entries(data.keywords).forEach(([keys, emojis]) => {
+      const keyList = keys.toLowerCase().split(',');
+      if (keyList.some(k => k.includes(query) || query.includes(k))) {
+        splitEmojis(emojis).forEach(e => results.add(e));
+      }
+    });
+    // Also search category name
+    if (cat.toLowerCase().includes(query)) {
+      splitEmojis(data.emojis).forEach(e => results.add(e));
+    }
+  });
+
+  if (results.size === 0) {
+    contentEl.innerHTML = '<div class="section-title" style="text-align:center;padding:40px">没有找到匹配的表情 😅 试试其他关键词</div>';
+    return;
+  }
+
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = '🔍 搜索结果 (' + results.size + ')';
+  contentEl.appendChild(title);
+  const grid = document.createElement('div');
+  grid.className = 'emoji-grid';
+  results.forEach(e => grid.appendChild(createEmojiEl(e)));
+  contentEl.appendChild(grid);
+}
+
+// Init tabs
+function initTabs() {
+  const allTabs = [
+    { id: 'all', label: '📋 全部' },
+    { id: 'recent', label: '🕐 最近' },
+    { id: 'favorites', label: '⭐ 收藏' },
+    ...Object.keys(emojiData).map(k => ({ id: k, label: k.slice(0, 2) + ' ' + k.slice(2) }))
+  ];
+  tabsEl.innerHTML = '';
+  allTabs.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (currentTab === t.id ? ' active' : '');
+    btn.textContent = t.label;
+    btn.onclick = () => {
+      currentTab = t.id;
+      recommendPanel.classList.remove('show');
+      initTabs();
+      render();
+    };
+    tabsEl.appendChild(btn);
+  });
+}
+
+// Search debounce
+let searchTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    recommendPanel.classList.remove('show');
+    render();
+  }, 200);
+});
+
+// Init
+initTabs();
+render();
+</script>
+<script async src="https://cdn.siteanalyze.io/monetize.js"></script>
+</body>
+</html>
